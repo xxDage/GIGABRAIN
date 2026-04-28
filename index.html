@@ -22,26 +22,11 @@
 
 <!-- Service Worker Registration -->
 <script>
-if ('serviceWorker' in navigator) {
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => {
-    // Inline service worker via blob
-    const swCode = `
-      const CACHE = 'gigabrain-v1';
-      self.addEventListener('install', e => {
-        self.skipWaiting();
-      });
-      self.addEventListener('activate', e => {
-        e.waitUntil(clients.claim());
-      });
-      self.addEventListener('fetch', e => {
-        e.respondWith(fetch(e.request).catch(() => caches.match(e.request)));
-      });
-    `;
-    const blob = new Blob([swCode], {type: 'application/javascript'});
-    const swUrl = URL.createObjectURL(blob);
-    navigator.serviceWorker.register(swUrl).then(() => {
-      console.log('[GigaBrain] Service Worker registered');
-    }).catch(e => console.log('[GigaBrain] SW failed:', e));
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('[GigaBrain] SW registered'))
+      .catch(e => console.log('[GigaBrain] SW skipped:', e.message));
   });
 }
 </script>
