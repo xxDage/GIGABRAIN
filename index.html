@@ -552,7 +552,7 @@ input[type=range]::-webkit-slider-thumb {
   padding: 12px; text-align: center; cursor: pointer;
   font-family: var(--font-main); font-size: 12px; font-weight: 700;
   text-transform: uppercase; letter-spacing: 1px;
-  color: var(--text); opacity: 0.7; background: transparent; border: none; transition: all 0.2s;
+  color: var(--text); opacity: 0.7; background: transparent; border: none;
 }
 .mode-btn.active { opacity: 1; }
 .mode-btn.active { background: var(--accent); color: var(--bg); }
@@ -654,7 +654,7 @@ input[type=range]::-webkit-slider-thumb {
   padding: 14px 8px; gap: 4px;
   border: 1.5px solid var(--border);
   background: transparent; border-radius: var(--card-radius);
-  cursor: pointer; transition: all 0.2s; font-family: var(--font-main);
+  cursor: pointer; font-family: var(--font-main);
   color: var(--text);
   flex: 1; min-width: 0;
 }
@@ -1788,6 +1788,7 @@ function saveMatchToHistory(won) {
     isMeme: isMeme,
     guesses: JSON.parse(JSON.stringify(state.guesses)),
     theme: currentTheme,
+    gigabrainPhrase: (won && currentDifficulty === 'gigabrain') ? window._lastGigabrainPhrase : null,
   };
   matchHistory.unshift(entry);
   if (matchHistory.length > 10) matchHistory = matchHistory.slice(0, 10);
@@ -1926,13 +1927,23 @@ function replayMatch(idx) {
   state.mpSetupDone = false;
   state.revealVisible = false;
 
+  // Meme-Theme wiederherstellen falls Match im Meme gespielt wurde
+  if (m.isMeme && currentTheme !== 'meme') {
+    window._themeBeforeReplay = currentTheme;
+    setTheme('meme');
+  } else {
+    window._themeBeforeReplay = null;
+  }
+
   // Setup game screen like initGameUI but read-only
   isReplayMode = true;
   showScreen('game');
   const diffLabels = { easy:'Einfach', medium:'Mittel', hard:'Schwer', gigabrain:'Gigabrain' };
   const diffLabel = m.difficulty ? ' – ' + (diffLabels[m.difficulty] || '') : '';
-  document.getElementById('g-title').textContent = (m.mode === 'single' ? 'Singleplayer' : 'Multiplayer') + diffLabel;
+  const gTitle = document.getElementById('g-title');
+  gTitle.textContent = (m.mode === 'single' ? 'Singleplayer' : 'Multiplayer') + diffLabel;
   document.getElementById('g-info').textContent = `Code: ${m.codeLen} Stellen · ${m.numColors} Farben · Max. ${m.maxTries} Versuche`;
+
   const _hide = id => { const el = document.getElementById(id); if (el) el.style.display = 'none'; };
   _hide('mp-setup'); _hide('mp-reveal'); _hide('mp-feedback-panel');
   _hide('color-picker'); _hide('submit-btn'); _hide('reveal-code');
@@ -1950,6 +1961,28 @@ function replayMatch(idx) {
   // Only show solution if game was completed (not unfinished)
   if (m.won !== null) {
     reviewGame_inline();
+  }
+
+  // Gigabrain-Phrase als Sticker – NACH initGameUI setzen damit g-title nicht überschrieben wird
+  const replayGTitle = document.getElementById('g-title');
+  const existingSticker = document.getElementById('replay-gigabrain-sticker');
+  if (existingSticker) existingSticker.remove();
+  if (m.gigabrainPhrase && replayGTitle) {
+    const sticker = document.createElement('div');
+    sticker.id = 'replay-gigabrain-sticker';
+    sticker.textContent = m.gigabrainPhrase;
+    sticker.style.cssText = [
+      'position:absolute','top:-14px','left:50%',
+      'transform:translateX(-50%) rotate(-3deg)',
+      'background:#ff4500','color:#fff',
+      "font-family:'Lilita One',cursive",
+      'font-size:13px','padding:5px 14px','white-space:nowrap',
+      'z-index:10','box-shadow:2px 2px 0 rgba(0,0,0,0.3)',
+      'border-radius:4px','pointer-events:none'
+    ].join(';');
+    replayGTitle.style.position = 'relative';
+    replayGTitle.style.overflow = 'visible';
+    replayGTitle.appendChild(sticker);
   }
 
 }
@@ -2081,6 +2114,14 @@ function showScreen(id) {
   document.getElementById('result-overlay').style.display = 'none'; document.getElementById('result-backdrop').style.display = 'none';
 }
 function goHome() {
+  // Meme-Theme nach Review zurücksetzen
+  if (window._themeBeforeReplay) {
+    setTheme(window._themeBeforeReplay);
+    window._themeBeforeReplay = null;
+    // Schwierigkeits-Preset zurücksetzen damit nicht das des angesehenen Matches übrig bleibt
+    currentDifficulty = null;
+    document.querySelectorAll('.diff-btn').forEach(b => b.classList.remove('active'));
+  }
   // Save unfinished game if it has at least one guess
   if (state.phase === 'playing' && state.guesses.length > 0 && !isReplayMode) {
     saveUnfinishedGame();
@@ -2860,6 +2901,7 @@ function showResult(won) {
   const badge = document.getElementById('gigabrain-badge');
   if (won && currentDifficulty === 'gigabrain') {
     const msg = GIGABRAIN_MSGS[Math.floor(Math.random() * GIGABRAIN_MSGS.length)];
+    window._lastGigabrainPhrase = msg;
     badge.textContent = msg;
     badge.style.display = 'block';
     launchGigabrainConfetti();
