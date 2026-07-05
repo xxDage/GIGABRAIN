@@ -751,7 +751,7 @@ input[type=range]::-webkit-slider-thumb {
 /* =============================================
    GAME LAYOUT
    ============================================= */
-.game-layout { width: 100%; max-width: 640px; height: 100%; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+.game-layout { width: 100%; max-width: 640px; height: 100%; display: flex; flex-direction: column; gap: 8px; min-height: 0; position: relative; }
 
 .page-header {
   display: flex; align-items: center; gap: 12px;
@@ -1061,7 +1061,7 @@ input[type=range]::-webkit-slider-thumb {
 .secret-pegs { }
 
 .mp-feedback {
-  position: fixed;
+  position: absolute;
   background: var(--surface);
   border: 1px solid var(--accent);
   border-radius: calc(var(--card-radius) + 4px);
@@ -1069,7 +1069,7 @@ input[type=range]::-webkit-slider-thumb {
   box-shadow: 0 8px 32px rgba(0,0,0,0.25);
   z-index: 200;
   white-space: normal;
-  max-width: calc(100vw - 32px);
+  max-width: calc(100% - 16px);
   width: max-content;
   left: 50%;
   transform: translateX(-50%);
@@ -1098,8 +1098,12 @@ input[type=range]::-webkit-slider-thumb {
   z-index: 1;
 }
 :root.modern .mp-feedback {
-  background: var(--glass-bg); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  background: #f2f2f7;
   border-color: var(--accent); box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+}
+:root.modern.dark .mp-feedback {
+  background: #2c2c2e;
+  border-color: var(--accent); box-shadow: 0 8px 32px rgba(0,0,0,0.25);
 }
 
 .fb-controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: center; }
@@ -1494,7 +1498,7 @@ input[type=range]::-webkit-slider-thumb {
             <div class="secret-pegs pegs-area" id="secret-pegs"></div>
             <div style="display:flex;gap:4px;flex-shrink:0;align-items:center;" id="secret-feedback-placeholder">
               <button class="btn btn-accent2 btn-sm" onclick="randomizeSecret()" style="padding:5px 8px;" title="Zufällig">🎲 Zufällig</button>
-              <button class="btn btn-accent btn-sm" onclick="confirmSecret()" style="padding:5px 10px;font-weight:700;" title="Bestätigen">✓</button>
+              <button class="btn btn-accent btn-sm" onclick="confirmSecret()" style="padding:5px 8px;font-size:18px;line-height:1;min-width:36px;min-height:36px;display:flex;align-items:center;justify-content:center;" title="Bestätigen">✓</button>
               <div style="width:20px;flex-shrink:0;"></div>
             </div>
           </div>
@@ -1502,7 +1506,7 @@ input[type=range]::-webkit-slider-thumb {
       </div>
 
       <!-- mp-feedback-panel is injected dynamically above the last guess row -->
-      <div id="mp-feedback-panel" class="mp-feedback" style="display:none;left:50%;transform:translateX(-50%);">
+      <div id="mp-feedback-panel" class="mp-feedback" style="visibility:hidden;pointer-events:none;left:50%;transform:translateX(-50%);">
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;">
           <span style="font-size:11px; color:var(--muted); font-family:var(--font-main); width:100%; text-align:center;">Bewertung</span>
           <div style="display:flex; align-items:center; gap:6px;">
@@ -1729,7 +1733,7 @@ function getActiveColors() {
   } else if (useRandomColors) {
     const all12 = [0,1,2,3,4,5,6,7,8,9,10,11];
     const shuffled = [...all12].sort(() => Math.random() - 0.5);
-    indices = shuffled.slice(0, n).sort((a,b) => a-b);
+    indices = shuffled.slice(0, n); // Reihenfolge bleibt zufällig – kein Re-Sort
     currentColorIndices = indices;
   } else {
     indices = getColorSets()[n] || Array.from({length: n}, (_, i) => i);
@@ -1860,10 +1864,10 @@ function autoPauseOnExit() {
     saveUnfinishedGame();
   }
 }
+// Nur visibilitychange – pagehide ist redundant und führt zu Doppel-Speicherung
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') autoPauseOnExit();
 });
-window.addEventListener('pagehide', autoPauseOnExit);
 
 function renderHistory() {
   const el = document.getElementById('history-list');
@@ -2266,6 +2270,8 @@ function resumeLastGame() {
 }
 
 function saveUnfinishedGame() {
+  // Vorherigen pausierten Eintrag desselben Spiels entfernen (verhindert Duplikate)
+  matchHistory = matchHistory.filter(m => !(m.unfinished && m.mode === state.mode && m.codeLen === state.codeLen && m.date && JSON.stringify(m.secret) === JSON.stringify(state.secret)));
   const { colors: C, isMeme } = getActiveColors();
   const entry = {
     date: new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' }),
@@ -2307,7 +2313,7 @@ function initGameUI() {
   const sb = document.getElementById('surrender-btn');
   if (sb) sb.style.display = state.mode === 'single' ? 'block' : 'none';
   const _mpPanel = document.getElementById('mp-feedback-panel');
-  if (_mpPanel) { _mpPanel.style.display = 'none'; _mpPanel.classList.remove('visible'); }
+  if (_mpPanel) { _mpPanel.style.visibility = 'hidden'; _mpPanel.style.pointerEvents = 'none'; _mpPanel.classList.remove('visible'); }
   if (!isSingle && !state.mpSetupDone) initSecretPicker();
   buildColorPicker(); renderRows(); updateActionBar();
 }
@@ -2819,16 +2825,17 @@ function positionMpTooltip() {
   if (!panel) return;
   const activeRow = document.querySelector('#rows-container .active-row');
   if (!activeRow) return;
-  const rect = activeRow.getBoundingClientRect();
-  // Unsichtbar einblenden, messen, dann sichtbar
-  panel.style.opacity = '0';
-  panel.style.display = 'block';
-  requestAnimationFrame(() => {
-    const panelH = panel.offsetHeight;
-    panel.style.top = (rect.top - panelH - 14) + 'px';
-    panel.style.opacity = '1';
-    panel.classList.add('visible');
-  });
+  const layout = document.querySelector('.game-layout');
+  if (!layout) return;
+  const rowRect = activeRow.getBoundingClientRect();
+  const layoutRect = layout.getBoundingClientRect();
+  // Position relativ zum game-layout (position:absolute)
+  const panelH = panel.offsetHeight;
+  const topRelative = rowRect.top - layoutRect.top - panelH - 14;
+  panel.style.top = topRelative + 'px';
+  panel.style.visibility = 'visible';
+  panel.style.pointerEvents = 'auto';
+  panel.classList.add('visible');
 }
 
 function submitGuess() {
@@ -2900,7 +2907,7 @@ function submitMpFeedback() {
   const inconsistent = !isConsistentWithHistory(state.currentGuess, state.guesses);
   state.guesses.push({ colors: [...state.currentGuess], feedback: fb, inconsistent });
   const _mpPanel = document.getElementById('mp-feedback-panel');
-  if (_mpPanel) { _mpPanel.style.display = 'none'; _mpPanel.classList.remove('visible'); }
+  if (_mpPanel) { _mpPanel.style.visibility = 'hidden'; _mpPanel.style.pointerEvents = 'none'; _mpPanel.classList.remove('visible'); }
   finishRound(fb);
 }
 
